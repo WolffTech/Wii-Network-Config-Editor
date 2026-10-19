@@ -1005,7 +1005,7 @@ if(chosenmenu==1){
 				GRRLIB_DrawImg(equal_coordX, equal_coordY, tex_equal_png, 0, kbd_button_Xsize, kbd_button_Ysize, GRRLIB_WHITE);
 				GRRLIB_DrawImg(semicolon_coordX, semicolon_coordY, tex_semicolon_png, 0, kbd_button_Xsize, kbd_button_Ysize, GRRLIB_WHITE);
 
-                GRRLIB_Printf(35, 50, tex_BMfont5, GRRLIB_BLACK, SSIDkbd_zoom, SSIDkeyboard_writtentext); //write on the screen the text that is being written
+                GRRLIB_Printf(35, 50, tex_BMfont5, GRRLIB_BLACK, SSIDkbd_zoom, "%s", SSIDkeyboard_writtentext); //write on the screen the text that is being written
 				
 				
 				
@@ -1763,8 +1763,8 @@ while(chosenmenu==2){//keyboard for password. max 63 characters
 				
 				
 				//this small part splits passwordkeyboard_wirttentext into two lines when it reached 45 caracters.
-                GRRLIB_Printf(35, 50, tex_BMfont5, GRRLIB_BLACK, passwordkbd_zoom, password_firstline); //write on the screen the text that is being written
-				GRRLIB_Printf(35, 75, tex_BMfont5, GRRLIB_BLACK, passwordkbd_zoom, password_secondline); //write on the screen the text that is being written
+                GRRLIB_Printf(35, 50, tex_BMfont5, GRRLIB_BLACK, passwordkbd_zoom, "%s", password_firstline); //write on the screen the text that is being written
+				GRRLIB_Printf(35, 75, tex_BMfont5, GRRLIB_BLACK, passwordkbd_zoom, "%s", password_secondline); //write on the screen the text that is being written
 				
 				GRRLIB_Printf(35, 100, tex_BMfont5, CurrentColor(Password_indexkeyboard,63), 1, "%d/63", Password_indexkeyboard); //turns red when we are at 63/63
 
