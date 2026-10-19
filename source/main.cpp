@@ -151,6 +151,8 @@ int cursor_rotation_angle = 0; //initial angle
 int threshold = 10;
 int sensitivity = 15;
 	
+bool cursor_ir_valid = false; //true while the wiimote is pointing at the sensor bar
+
 void updatecursorpos(){
 	WPAD_SetVRes(0, 640, 480);
         WPAD_ScanPads();
@@ -166,6 +168,7 @@ void updatecursorpos(){
 		
 		WPAD_IR(WPAD_CHAN_0, &ir1);
 
+		cursor_ir_valid = data->ir.valid;
 		if (data->ir.valid) {
 			cursor_positionX = (int)ir1.x;
 			cursor_positionY = (int)ir1.y;
@@ -208,6 +211,27 @@ void updatecursorpos(){
 }
 
 ////////////////END CURSOR////////////////
+
+#include "dpad_navigation.h"
+
+//d-pad targets for both on-screen keyboards. Sizes match the A-button hit tests below, not the drawn textures.
+const NavTarget keyboard_navtargets[] = {
+	{one_coordX,one_coordY,44,36}, {two_coordX,two_coordY,44,36}, {three_coordX,three_coordY,44,36}, {four_coordX,four_coordY,44,36},
+	{five_coordX,five_coordY,44,36}, {six_coordX,six_coordY,44,36}, {seven_coordX,seven_coordY,44,36}, {eight_coordX,eight_coordY,44,36},
+	{nine_coordX,nine_coordY,44,36}, {zero_coordX,zero_coordY,44,36}, {dash_coordX,dash_coordY,44,36}, {erase_coordX,erase_coordY,erase_width,erase_height},
+	{btq_coordX,btq_coordY,44,36}, {btw_coordX,btw_coordY,44,36}, {bte_coordX,bte_coordY,44,36}, {btr_coordX,btr_coordY,44,36},
+	{btt_coordX,btt_coordY,44,36}, {bty_coordX,bty_coordY,44,36}, {btu_coordX,btu_coordY,44,36}, {bti_coordX,bti_coordY,44,36},
+	{bto_coordX,bto_coordY,44,36}, {btp_coordX,btp_coordY,44,36}, {underscore_coordX,underscore_coordY,44,36},
+	{caps_coordX,caps_coordY,caps_width,caps_height}, {bta_coordX,bta_coordY,44,36}, {bts_coordX,bts_coordY,44,36}, {btd_coordX,btd_coordY,44,36},
+	{btf_coordX,btf_coordY,44,36}, {btg_coordX,btg_coordY,44,36}, {bth_coordX,bth_coordY,44,36}, {btj_coordX,btj_coordY,44,36},
+	{btk_coordX,btk_coordY,44,36}, {btl_coordX,btl_coordY,44,36}, {semicolon_coordX,semicolon_coordY,44,36},
+	{btz_coordX,btz_coordY,44,36}, {btx_coordX,btx_coordY,44,36}, {btc_coordX,btc_coordY,44,36}, {btv_coordX,btv_coordY,44,36},
+	{btb_coordX,btb_coordY,44,36}, {btn_coordX,btn_coordY,44,36}, {btm_coordX,btm_coordY,44,36}, {comma_coordX,comma_coordY,44,36},
+	{point_coordX,point_coordY,44,36}, {equal_coordX,equal_coordY,44,36},
+	{bracket_1_coordX,bracket_1_coordY,44,36}, {bracket_2_coordX,bracket_2_coordY,44,36}, {space_coordX,space_coordY,space_width,space_height},
+	{backslash_coordX,backslash_coordY,44,36}, {slash_coordX,slash_coordY,44,36}, {apostrophe_coordX,apostrophe_coordY,44,36}, {hash_coordX,hash_coordY,44,36},
+	{button1CoordX,button1CoordY,buttonWidth,buttonHeight}, {button3CoordX,button3CoordY,buttonWidth,buttonHeight}, //cancel, save
+};
 
 
 
@@ -712,11 +736,21 @@ if(chosenmenu==0) {
 
 	////////////////////////////////////////main menu://///////////////////////
 
+	//the SSID/password/security buttons are last so they can be left out when they're hidden (wired)
+	const NavTarget mainmenu_navtargets[] = {
+		{exitCoordX,exitCoordY,48,44}, //only the power icon part of the exit button's hit box
+		{WirelessCoordX,WirelessCoordY,connectiontype_Width,connectiontype_Height}, {WiredCoordX,WiredCoordY,connectiontype_Width,connectiontype_Height},
+		{creditbtnCoordX,creditbtnCoordY,buttonWidth,buttonHeight},
+		{mainmenubt1CoordX,mainmenubt1CoordY,buttonWidth,buttonHeight}, {mainmenubt2CoordX,mainmenubt2CoordY,buttonWidth,buttonHeight}, {mainmenubt3CoordX,mainmenubt3CoordY,buttonWidth,buttonHeight},
+	};
+	const int mainmenu_navtargets_wired = 4;
+
 	while (chosenmenu==0){ //main menu
 	
 				
 
 		        updatecursorpos();
+				if (networktype==1) dpad_navigate(mainmenu_navtargets); else dpad_navigate(mainmenu_navtargets, mainmenu_navtargets_wired);
 				GRRLIB_DrawImg(0, 0, tex_settings_background_png, 0, 1, 1, GRRLIB_WHITE);  
 				
 				GRRLIB_DrawImg(WiredCoordX, WiredCoordY, tex_wired_png, 0, 1, 1, GRRLIB_WHITE); //button 1
@@ -870,6 +904,7 @@ if(chosenmenu==1){
 	int collision_sizex = 5;
 	int collision_sizey = 5;
         updatecursorpos();
+		dpad_navigate(keyboard_navtargets);
 	
 				GRRLIB_DrawImg(0, 0, tex_blank_kbd_png, 0, 1, 1, GRRLIB_WHITE);  //shows the keyboard on screen
 
@@ -1620,6 +1655,7 @@ while(chosenmenu==2){//keyboard for password. max 63 characters
 		
 
 		updatecursorpos();
+		dpad_navigate(keyboard_navtargets);
 	
 				GRRLIB_DrawImg(0, 0, tex_blank_kbd_png, 0, 1, 1, GRRLIB_WHITE);  //shows the keyboard on screen
 				
@@ -2408,11 +2444,18 @@ while(chosenmenu==2){//keyboard for password. max 63 characters
 
 ////////////////////////////////////////////////SECURITY MENU :////////////////////////////////////////////////////////////
 if (chosenmenu==3){
+	const NavTarget security_navtargets[] = {
+		{button1CoordX,button1CoordY,buttonWidth,buttonHeight}, //save
+		{buttonsecurity1X,buttonsecurity1Y,buttonWidth,buttonHeight}, {buttonsecurity2X,buttonsecurity2Y,buttonWidth,buttonHeight},
+		{buttonsecurity3X,buttonsecurity3Y,buttonWidth,buttonHeight}, {buttonsecurity4X,buttonsecurity4Y,buttonWidth,buttonHeight},
+		{buttonsecurity5X,buttonsecurity5Y,buttonWidth,buttonHeight}, {buttonsecurity6X,buttonsecurity6Y,buttonWidth,buttonHeight},
+	};
 	while(chosenmenu==3){
 
 		
 		
 		updatecursorpos();
+		dpad_navigate(security_navtargets);
 	
 				GRRLIB_DrawImg(0, 0, tex_settings_background_png, 0, 1, 1, GRRLIB_WHITE);  //shows the keyboard on screen
 				
@@ -2522,8 +2565,14 @@ if (chosenmenu==3){
 	/////////////////////////CONFIRM CHANGES MENU:////(contains the "note" window for the network connection test function which is located at the label connectiontest:)
 	
 if(chosenmenu==4){
+	//cancel, connection test, save and exit. The connection test's note dialog uses the 1st and 3rd (cancel, proceed).
+	const NavTarget confirm_navtargets[] = {
+		{button1CoordX,button1CoordY,buttonWidth,buttonHeight}, {button2CoordX,button2CoordY,buttonWidth,buttonHeight}, {button3CoordX,button3CoordY,buttonWidth,buttonHeight},
+	};
+	const NavTarget note_navtargets[] = {confirm_navtargets[0], confirm_navtargets[2]};
 	while(chosenmenu==4){
 		updatecursorpos();
+		dpad_navigate(confirm_navtargets);
 	
 		GRRLIB_DrawImg(0, 0, tex_settings_background_png, 0, 1, 1, GRRLIB_WHITE);  //shows the keyboard on screen
 				
@@ -2580,6 +2629,7 @@ if(chosenmenu==4){
 				while(1){ //we are now inside a new menu. this menu is there to warn the user that testing the network will require rebooting the program.
 					
 					updatecursorpos();
+					dpad_navigate(note_navtargets);
 					GRRLIB_DrawImg(0, 0, tex_settings_background_png, 0, 1, 1, GRRLIB_WHITE);  
 					GRRLIB_DrawImg(83, 67, tex_dialogue_box_png, 0, 1, 1, GRRLIB_WHITE);  
 					GRRLIB_Printf(300-10,120, tex_BMfont5, GRRLIB_BLACK, 1.5, "Note :");
