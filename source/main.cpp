@@ -82,6 +82,7 @@ int buttonWidth = 172, buttonHeight = 44;
 #include "wiimote_vibration.h"
 #include "isfs_readwrite.h"
 #include "length2hex.h"
+#include "keyboard_chars.h"
 
 //include for textures,backgrounds,fonts..
 #include "gfx/font/BMfont1.h"
@@ -306,6 +307,43 @@ float SSIDkbd_zoom = 1.5, passwordkbd_zoom = 1.5;
 
 //this float variable determines the on-screen keyboard's key sizes.
 float kbd_button_Xsize = 1.0, kbd_button_Ysize = 1.0;
+
+//number and symbol keys. Only letters have CAPS textures, so these keys get their CAPS character drawn with the font.
+struct SymbolKey { int x, y; GRRLIB_texImg *tex; char key; };
+
+//hides the key's printed label and prints the character CAPS makes it type. x, y and scale must match the key's GRRLIB_DrawImg.
+void kbd_draw_caps_label(const SymbolKey &k, int x, int y, float scale, GRRLIB_texImg *font){
+	char caps_char = kbd_char(k.key, true);
+	if (caps_char == k.key) return; //'_' types the same in both modes
+
+	//GRRLIB scales around the image's center
+	float centerX = x + k.tex->w/2.0f, centerY = y + k.tex->h/2.0f;
+
+	//key faces only shade top to bottom, so a plain column stretched over the middle hides the label (labels stay 10px+ from the sides)
+	GRRLIB_DrawPart(centerX - 0.5f, y, 10, 0, 1, k.tex->h, k.tex, 0, scale*(k.tex->w - 20), scale, GRRLIB_WHITE);
+
+	//glyphs fill the top 10 of the font's 16 rows. Zoom 2 makes them as tall as the labels on the key textures.
+	float zoom = 2*scale;
+	GRRLIB_Printf(centerX - font->tilew/2.0f, centerY + 3*zoom - font->tileh/2.0f, font, GRRLIB_BLACK, zoom, "%c", caps_char);
+}
+
+template <int N>
+void kbd_draw_caps_labels(const SymbolKey (&keys)[N], GRRLIB_texImg *font){
+	for (int i=0;i<N;i++) kbd_draw_caps_label(keys[i], keys[i].x, keys[i].y, kbd_button_Xsize, font);
+}
+
+//draws the zoomed key under the cursor (first match in table order), with its CAPS label when CAPS is on
+template <int N>
+void kbd_draw_hovered_symbol_key(const SymbolKey (&keys)[N], bool caps, GRRLIB_texImg *font){
+	for (int i=0;i<N;i++){
+		const SymbolKey &k = keys[i];
+		if (!CusorOnKey(k.x,k.y,44,36)) continue;
+
+		GRRLIB_DrawImg(k.x-10, k.y-10, k.tex, 0, kbd_button_Xsize+0.5, kbd_button_Ysize+0.5, GRRLIB_WHITE);
+		if (caps) kbd_draw_caps_label(k, k.x-10, k.y-10, kbd_button_Xsize+0.5, font);
+		return;
+	}
+}
 
 //network testing:
 int isNetworkWorking = 0; //0 = the user didn't even click on 'test connection'; 1=user clicked on 'test connection' but the wifi isnt working; and 2= the user clicked and the wifi works.
@@ -639,7 +677,21 @@ int main(int argc,char** argv) {
     GRRLIB_InitTileSet(tex_equal_png, 44, 36, 0); 
 	
 	GRRLIB_texImg *tex_semicolon_png = GRRLIB_LoadTexture(semicolon);
-    GRRLIB_InitTileSet(tex_semicolon_png, 44, 36, 0); 
+    GRRLIB_InitTileSet(tex_semicolon_png, 44, 36, 0);
+
+	//shared by both keyboards. Keep the order: when the cursor touches two keys, the first one is the one zoomed.
+	const SymbolKey symbol_keys[] = {
+		{zero_coordX,zero_coordY,tex_zero_png,'0'}, {one_coordX,one_coordY,tex_one_png,'1'}, {two_coordX,two_coordY,tex_two_png,'2'},
+		{three_coordX,three_coordY,tex_three_png,'3'}, {four_coordX,four_coordY,tex_four_png,'4'}, {five_coordX,five_coordY,tex_five_png,'5'},
+		{six_coordX,six_coordY,tex_six_png,'6'}, {seven_coordX,seven_coordY,tex_seven_png,'7'}, {eight_coordX,eight_coordY,tex_eight_png,'8'},
+		{nine_coordX,nine_coordY,tex_nine_png,'9'},
+		{bracket_1_coordX,bracket_1_coordY,tex_bracket_1_png,'['}, {bracket_2_coordX,bracket_2_coordY,tex_bracket_2_png,']'},
+		{backslash_coordX,backslash_coordY,tex_backslash_png,'\\'}, {slash_coordX,slash_coordY,tex_slash_png,'/'},
+		{apostrophe_coordX,apostrophe_coordY,tex_apostrophe_png,'\''}, {hash_coordX,hash_coordY,tex_hash_png,'#'},
+		{comma_coordX,comma_coordY,tex_comma_png,','}, {point_coordX,point_coordY,tex_point_png,'.'},
+		{equal_coordX,equal_coordY,tex_equal_png,'='}, {semicolon_coordX,semicolon_coordY,tex_semicolon_png,';'},
+		{dash_coordX,dash_coordY,tex_dash_png,'-'}, {underscore_coordX,underscore_coordY,tex_underscore_png,'_'},
+	};
 	
 	
 	
@@ -1004,8 +1056,9 @@ if(chosenmenu==1){
 				GRRLIB_DrawImg(point_coordX, point_coordY, tex_point_png, 0, kbd_button_Xsize, kbd_button_Ysize, GRRLIB_WHITE);
 				GRRLIB_DrawImg(equal_coordX, equal_coordY, tex_equal_png, 0, kbd_button_Xsize, kbd_button_Ysize, GRRLIB_WHITE);
 				GRRLIB_DrawImg(semicolon_coordX, semicolon_coordY, tex_semicolon_png, 0, kbd_button_Xsize, kbd_button_Ysize, GRRLIB_WHITE);
+				if (SSID_uppercase) kbd_draw_caps_labels(symbol_keys, tex_BMfont5); //after every key is drawn so nothing covers a label
 
-                GRRLIB_Printf(35, 50, tex_BMfont5, GRRLIB_BLACK, SSIDkbd_zoom, SSIDkeyboard_writtentext); //write on the screen the text that is being written
+                GRRLIB_Printf(35, 50, tex_BMfont5, GRRLIB_BLACK, SSIDkbd_zoom, "%s", SSIDkeyboard_writtentext); //write on the screen the text that is being written
 				
 				
 				
@@ -1034,260 +1087,260 @@ if(chosenmenu==1){
 	if(wpaddown & WPAD_BUTTON_A || paddown & PAD_BUTTON_A) {
 
 		if(GRRLIB_RectOnRect(bta_coordX,bta_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
-			if (SSID_indexkeyboard<=31) { //if we aren't at the maximum length ---> if SSID_uppercase==true we write 'A', else we write 'a'
-				if (SSID_uppercase==true){SSIDkeyboard_writtentext[SSID_indexkeyboard] = 'A';} else {SSIDkeyboard_writtentext[SSID_indexkeyboard] = 'a';}
+			if (SSID_indexkeyboard<=31) { //if we aren't at the maximum length ---> kbd_char() picks 'a' or 'A' from SSID_uppercase (CAPS)
+				SSIDkeyboard_writtentext[SSID_indexkeyboard] = kbd_char('a', SSID_uppercase);
 				SSID_indexkeyboard+=1;
 				presssound();
 			} else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(btb_coordX,btb_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (SSID_indexkeyboard<=31) { 
-				if (SSID_uppercase==true){SSIDkeyboard_writtentext[SSID_indexkeyboard] = 'B';} else {SSIDkeyboard_writtentext[SSID_indexkeyboard] = 'b';}
+				SSIDkeyboard_writtentext[SSID_indexkeyboard] = kbd_char('b', SSID_uppercase);
 				SSID_indexkeyboard+=1;
 				presssound();
 			}else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(btc_coordX,btc_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (SSID_indexkeyboard<=31) { 
-				if (SSID_uppercase==true){SSIDkeyboard_writtentext[SSID_indexkeyboard] = 'C';} else {SSIDkeyboard_writtentext[SSID_indexkeyboard] = 'c';}
+				SSIDkeyboard_writtentext[SSID_indexkeyboard] = kbd_char('c', SSID_uppercase);
 				SSID_indexkeyboard+=1;
 				presssound();
 			}else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(btd_coordX,btd_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (SSID_indexkeyboard<=31) { 
-				if (SSID_uppercase==true){SSIDkeyboard_writtentext[SSID_indexkeyboard] = 'D';} else {SSIDkeyboard_writtentext[SSID_indexkeyboard] = 'd';}
+				SSIDkeyboard_writtentext[SSID_indexkeyboard] = kbd_char('d', SSID_uppercase);
 				SSID_indexkeyboard+=1;
 				presssound();
 			} else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(bte_coordX,bte_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (SSID_indexkeyboard<=31) { 
-				if (SSID_uppercase==true){SSIDkeyboard_writtentext[SSID_indexkeyboard] = 'E';} else {SSIDkeyboard_writtentext[SSID_indexkeyboard] = 'e';}
+				SSIDkeyboard_writtentext[SSID_indexkeyboard] = kbd_char('e', SSID_uppercase);
 				SSID_indexkeyboard+=1;
 				presssound();
 			} else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(btf_coordX,btf_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (SSID_indexkeyboard<=31) { 
-				if (SSID_uppercase==true){SSIDkeyboard_writtentext[SSID_indexkeyboard] = 'F';} else {SSIDkeyboard_writtentext[SSID_indexkeyboard] = 'f';}
+				SSIDkeyboard_writtentext[SSID_indexkeyboard] = kbd_char('f', SSID_uppercase);
 				SSID_indexkeyboard+=1;
 				presssound();
 			} else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(btg_coordX,btg_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (SSID_indexkeyboard<=31) { 
-				if (SSID_uppercase==true){SSIDkeyboard_writtentext[SSID_indexkeyboard] = 'G';} else {SSIDkeyboard_writtentext[SSID_indexkeyboard] = 'g';}
+				SSIDkeyboard_writtentext[SSID_indexkeyboard] = kbd_char('g', SSID_uppercase);
 				SSID_indexkeyboard+=1;
 				presssound();
 			} else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(bth_coordX,bth_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (SSID_indexkeyboard<=31) { 
-				if (SSID_uppercase==true){SSIDkeyboard_writtentext[SSID_indexkeyboard] = 'H';} else {SSIDkeyboard_writtentext[SSID_indexkeyboard] = 'h';}
+				SSIDkeyboard_writtentext[SSID_indexkeyboard] = kbd_char('h', SSID_uppercase);
 				SSID_indexkeyboard+=1;
 				presssound();
 			} else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(bti_coordX,bti_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (SSID_indexkeyboard<=31) { 
-				if (SSID_uppercase==true){SSIDkeyboard_writtentext[SSID_indexkeyboard] = 'I';} else {SSIDkeyboard_writtentext[SSID_indexkeyboard] = 'i';}
+				SSIDkeyboard_writtentext[SSID_indexkeyboard] = kbd_char('i', SSID_uppercase);
 				SSID_indexkeyboard+=1;
 				presssound();
 			} else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(btj_coordX,btj_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (SSID_indexkeyboard<=31) { 
-				if (SSID_uppercase==true){SSIDkeyboard_writtentext[SSID_indexkeyboard] = 'J';} else {SSIDkeyboard_writtentext[SSID_indexkeyboard] = 'j';}
+				SSIDkeyboard_writtentext[SSID_indexkeyboard] = kbd_char('j', SSID_uppercase);
 				SSID_indexkeyboard+=1;
 				presssound();
 			} else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(btk_coordX,btk_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (SSID_indexkeyboard<=31) { 
-				if (SSID_uppercase==true){SSIDkeyboard_writtentext[SSID_indexkeyboard] = 'K';} else {SSIDkeyboard_writtentext[SSID_indexkeyboard] = 'k';}
+				SSIDkeyboard_writtentext[SSID_indexkeyboard] = kbd_char('k', SSID_uppercase);
 				SSID_indexkeyboard+=1;
 				presssound();
 			} else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(btl_coordX,btl_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (SSID_indexkeyboard<=31) { 
-				if (SSID_uppercase==true){SSIDkeyboard_writtentext[SSID_indexkeyboard] = 'L';} else {SSIDkeyboard_writtentext[SSID_indexkeyboard] = 'l';}
+				SSIDkeyboard_writtentext[SSID_indexkeyboard] = kbd_char('l', SSID_uppercase);
 				SSID_indexkeyboard+=1;
 				presssound();
 			} else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(btm_coordX,btm_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (SSID_indexkeyboard<=31) { 
-				if (SSID_uppercase==true){SSIDkeyboard_writtentext[SSID_indexkeyboard] = 'M';} else {SSIDkeyboard_writtentext[SSID_indexkeyboard] = 'm';}
+				SSIDkeyboard_writtentext[SSID_indexkeyboard] = kbd_char('m', SSID_uppercase);
 				SSID_indexkeyboard+=1;
 				presssound();
 			} else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(btn_coordX,btn_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (SSID_indexkeyboard<=31) { 
-				if (SSID_uppercase==true){SSIDkeyboard_writtentext[SSID_indexkeyboard] = 'N';} else {SSIDkeyboard_writtentext[SSID_indexkeyboard] = 'n';}
+				SSIDkeyboard_writtentext[SSID_indexkeyboard] = kbd_char('n', SSID_uppercase);
 				SSID_indexkeyboard+=1;
 				presssound();
 			} else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(bto_coordX,bto_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (SSID_indexkeyboard<=31) { 
-				if (SSID_uppercase==true){SSIDkeyboard_writtentext[SSID_indexkeyboard] = 'O';} else {SSIDkeyboard_writtentext[SSID_indexkeyboard] = 'o';}
+				SSIDkeyboard_writtentext[SSID_indexkeyboard] = kbd_char('o', SSID_uppercase);
 				SSID_indexkeyboard+=1;
 				presssound();
 			} else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(btp_coordX,btp_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (SSID_indexkeyboard<=31) { 
-				if (SSID_uppercase==true){SSIDkeyboard_writtentext[SSID_indexkeyboard] = 'P';} else {SSIDkeyboard_writtentext[SSID_indexkeyboard] = 'p';}
+				SSIDkeyboard_writtentext[SSID_indexkeyboard] = kbd_char('p', SSID_uppercase);
 				SSID_indexkeyboard+=1;
 				presssound();
 			} else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(btq_coordX,btq_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (SSID_indexkeyboard<=31) { 
-				if (SSID_uppercase==true){SSIDkeyboard_writtentext[SSID_indexkeyboard] = 'Q';} else {SSIDkeyboard_writtentext[SSID_indexkeyboard] = 'q';}
+				SSIDkeyboard_writtentext[SSID_indexkeyboard] = kbd_char('q', SSID_uppercase);
 				SSID_indexkeyboard+=1;
 				presssound();
 			} else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(btr_coordX,btr_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (SSID_indexkeyboard<=31) { 
-				if (SSID_uppercase==true){SSIDkeyboard_writtentext[SSID_indexkeyboard] = 'R';} else {SSIDkeyboard_writtentext[SSID_indexkeyboard] = 'r';}
+				SSIDkeyboard_writtentext[SSID_indexkeyboard] = kbd_char('r', SSID_uppercase);
 				SSID_indexkeyboard+=1;
 				presssound();
 			} else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(bts_coordX,bts_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (SSID_indexkeyboard<=31) { 
-				if (SSID_uppercase==true){SSIDkeyboard_writtentext[SSID_indexkeyboard] = 'S';} else {SSIDkeyboard_writtentext[SSID_indexkeyboard] = 's';}
+				SSIDkeyboard_writtentext[SSID_indexkeyboard] = kbd_char('s', SSID_uppercase);
 				SSID_indexkeyboard+=1;
 				presssound();
 			} else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(btt_coordX,btt_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (SSID_indexkeyboard<=31) { 
-				if (SSID_uppercase==true){SSIDkeyboard_writtentext[SSID_indexkeyboard] = 'T';} else {SSIDkeyboard_writtentext[SSID_indexkeyboard] = 't';}
+				SSIDkeyboard_writtentext[SSID_indexkeyboard] = kbd_char('t', SSID_uppercase);
 				SSID_indexkeyboard+=1;
 				presssound();
 			} else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(btu_coordX,btu_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (SSID_indexkeyboard<=31) { 
-				if (SSID_uppercase==true){SSIDkeyboard_writtentext[SSID_indexkeyboard] = 'U';} else {SSIDkeyboard_writtentext[SSID_indexkeyboard] = 'u';}
+				SSIDkeyboard_writtentext[SSID_indexkeyboard] = kbd_char('u', SSID_uppercase);
 				SSID_indexkeyboard+=1;
 				presssound();
 			} else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(btv_coordX,btv_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (SSID_indexkeyboard<=31) { 
-				if (SSID_uppercase==true){SSIDkeyboard_writtentext[SSID_indexkeyboard] = 'V';} else {SSIDkeyboard_writtentext[SSID_indexkeyboard] = 'v';}
+				SSIDkeyboard_writtentext[SSID_indexkeyboard] = kbd_char('v', SSID_uppercase);
 				SSID_indexkeyboard+=1;
 				presssound();
 			} else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(btw_coordX,btw_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (SSID_indexkeyboard<=31) { 
-				if (SSID_uppercase==true){SSIDkeyboard_writtentext[SSID_indexkeyboard] = 'W';} else {SSIDkeyboard_writtentext[SSID_indexkeyboard] = 'w';}
+				SSIDkeyboard_writtentext[SSID_indexkeyboard] = kbd_char('w', SSID_uppercase);
 				SSID_indexkeyboard+=1;
 				presssound();
 			}else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(btx_coordX,btx_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (SSID_indexkeyboard<=31) { 
-				if (SSID_uppercase==true){SSIDkeyboard_writtentext[SSID_indexkeyboard] = 'X';} else {SSIDkeyboard_writtentext[SSID_indexkeyboard] = 'x';}
+				SSIDkeyboard_writtentext[SSID_indexkeyboard] = kbd_char('x', SSID_uppercase);
 				SSID_indexkeyboard+=1;
 				presssound();
 			}else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(bty_coordX,bty_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (SSID_indexkeyboard<=31) { 
-				if (SSID_uppercase==true){SSIDkeyboard_writtentext[SSID_indexkeyboard] = 'Y';} else {SSIDkeyboard_writtentext[SSID_indexkeyboard] = 'y';}
+				SSIDkeyboard_writtentext[SSID_indexkeyboard] = kbd_char('y', SSID_uppercase);
 				SSID_indexkeyboard+=1;
 				presssound();
 			}else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(btz_coordX,btz_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (SSID_indexkeyboard<=31) { 
-				if (SSID_uppercase==true){SSIDkeyboard_writtentext[SSID_indexkeyboard] = 'Z';} else {SSIDkeyboard_writtentext[SSID_indexkeyboard] = 'z';}
+				SSIDkeyboard_writtentext[SSID_indexkeyboard] = kbd_char('z', SSID_uppercase);
 				SSID_indexkeyboard+=1;
 				presssound();
 			}else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(zero_coordX,zero_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (SSID_indexkeyboard<=31) { 
-				SSIDkeyboard_writtentext[SSID_indexkeyboard] = '0';
+				SSIDkeyboard_writtentext[SSID_indexkeyboard] = kbd_char('0', SSID_uppercase);
 				SSID_indexkeyboard+=1;
 				presssound();
 			} else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(one_coordX,one_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (SSID_indexkeyboard<=31) { 
-				SSIDkeyboard_writtentext[SSID_indexkeyboard] = '1';
+				SSIDkeyboard_writtentext[SSID_indexkeyboard] = kbd_char('1', SSID_uppercase);
 				SSID_indexkeyboard+=1;
 				presssound();
 			} else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(two_coordX,two_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (SSID_indexkeyboard<=31) { 
-				SSIDkeyboard_writtentext[SSID_indexkeyboard] = '2';
+				SSIDkeyboard_writtentext[SSID_indexkeyboard] = kbd_char('2', SSID_uppercase);
 				SSID_indexkeyboard+=1;
 				presssound();
 			} else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(three_coordX,three_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (SSID_indexkeyboard<=31) { 
-				SSIDkeyboard_writtentext[SSID_indexkeyboard] = '3';
+				SSIDkeyboard_writtentext[SSID_indexkeyboard] = kbd_char('3', SSID_uppercase);
 				SSID_indexkeyboard+=1;
 				presssound();
 			} else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(four_coordX,four_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (SSID_indexkeyboard<=31) { 
-				SSIDkeyboard_writtentext[SSID_indexkeyboard] = '4';
+				SSIDkeyboard_writtentext[SSID_indexkeyboard] = kbd_char('4', SSID_uppercase);
 				SSID_indexkeyboard+=1;
 				presssound();
 			} else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(five_coordX,five_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (SSID_indexkeyboard<=31) { 
-				SSIDkeyboard_writtentext[SSID_indexkeyboard] = '5';
+				SSIDkeyboard_writtentext[SSID_indexkeyboard] = kbd_char('5', SSID_uppercase);
 				SSID_indexkeyboard+=1;
 				presssound();
 			} else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(six_coordX,six_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (SSID_indexkeyboard<=31) { 
-				SSIDkeyboard_writtentext[SSID_indexkeyboard] = '6';
+				SSIDkeyboard_writtentext[SSID_indexkeyboard] = kbd_char('6', SSID_uppercase);
 				SSID_indexkeyboard+=1;
 				presssound();
 			} else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(seven_coordX,seven_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (SSID_indexkeyboard<=31) { 
-				SSIDkeyboard_writtentext[SSID_indexkeyboard] = '7';
+				SSIDkeyboard_writtentext[SSID_indexkeyboard] = kbd_char('7', SSID_uppercase);
 				SSID_indexkeyboard+=1;
 				presssound();
 			}else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(eight_coordX,eight_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (SSID_indexkeyboard<=31) { 
-				SSIDkeyboard_writtentext[SSID_indexkeyboard] = '8';
+				SSIDkeyboard_writtentext[SSID_indexkeyboard] = kbd_char('8', SSID_uppercase);
 				SSID_indexkeyboard+=1;
 				presssound();
 			} else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(nine_coordX,nine_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (SSID_indexkeyboard<=31) { 
-				SSIDkeyboard_writtentext[SSID_indexkeyboard] = '9';
+				SSIDkeyboard_writtentext[SSID_indexkeyboard] = kbd_char('9', SSID_uppercase);
 				SSID_indexkeyboard+=1;
 				presssound();
 			}else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(dash_coordX,dash_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (SSID_indexkeyboard<=31) { 
-				SSIDkeyboard_writtentext[SSID_indexkeyboard] = '-';
+				SSIDkeyboard_writtentext[SSID_indexkeyboard] = kbd_char('-', SSID_uppercase);
 				SSID_indexkeyboard+=1;
 				presssound();
 			}else maxsound();
@@ -1301,70 +1354,70 @@ if(chosenmenu==1){
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(bracket_1_coordX,bracket_1_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (SSID_indexkeyboard<=31) { 
-				SSIDkeyboard_writtentext[SSID_indexkeyboard] = '[';
+				SSIDkeyboard_writtentext[SSID_indexkeyboard] = kbd_char('[', SSID_uppercase);
 				SSID_indexkeyboard+=1;
 				presssound();
 			}else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(bracket_2_coordX,bracket_2_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (SSID_indexkeyboard<=31) { 
-				SSIDkeyboard_writtentext[SSID_indexkeyboard] = ']';
+				SSIDkeyboard_writtentext[SSID_indexkeyboard] = kbd_char(']', SSID_uppercase);
 				SSID_indexkeyboard+=1;
 				presssound();
 			}else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(backslash_coordX,backslash_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (SSID_indexkeyboard<=31) { 
-				SSIDkeyboard_writtentext[SSID_indexkeyboard] = '\\';
+				SSIDkeyboard_writtentext[SSID_indexkeyboard] = kbd_char('\\', SSID_uppercase);
 				SSID_indexkeyboard+=1;
 				presssound();
 			}else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(slash_coordX,slash_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (SSID_indexkeyboard<=31) { 
-				SSIDkeyboard_writtentext[SSID_indexkeyboard] = '/';
+				SSIDkeyboard_writtentext[SSID_indexkeyboard] = kbd_char('/', SSID_uppercase);
 				SSID_indexkeyboard+=1;
 				presssound();
 			}else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(apostrophe_coordX,apostrophe_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (SSID_indexkeyboard<=31) { 
-				SSIDkeyboard_writtentext[SSID_indexkeyboard] = '\'';
+				SSIDkeyboard_writtentext[SSID_indexkeyboard] = kbd_char('\'', SSID_uppercase);
 				SSID_indexkeyboard+=1;
 				presssound();
 			}else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(hash_coordX,hash_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (SSID_indexkeyboard<=31) { 
-				SSIDkeyboard_writtentext[SSID_indexkeyboard] = '#';
+				SSIDkeyboard_writtentext[SSID_indexkeyboard] = kbd_char('#', SSID_uppercase);
 				SSID_indexkeyboard+=1;
 				presssound();
 			}else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(comma_coordX,comma_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (SSID_indexkeyboard<=31) { 
-				SSIDkeyboard_writtentext[SSID_indexkeyboard] = ',';
+				SSIDkeyboard_writtentext[SSID_indexkeyboard] = kbd_char(',', SSID_uppercase);
 				SSID_indexkeyboard+=1;
 				presssound();
 			}else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(point_coordX,point_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (SSID_indexkeyboard<=31) { 
-				SSIDkeyboard_writtentext[SSID_indexkeyboard] = '.';
+				SSIDkeyboard_writtentext[SSID_indexkeyboard] = kbd_char('.', SSID_uppercase);
 				SSID_indexkeyboard+=1;
 				presssound();
 			}else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(equal_coordX,equal_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (SSID_indexkeyboard<=31) { 
-				SSIDkeyboard_writtentext[SSID_indexkeyboard] = '=';
+				SSIDkeyboard_writtentext[SSID_indexkeyboard] = kbd_char('=', SSID_uppercase);
 				SSID_indexkeyboard+=1;
 				presssound();
 			}else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(semicolon_coordX,semicolon_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (SSID_indexkeyboard<=31) { 
-				SSIDkeyboard_writtentext[SSID_indexkeyboard] = ';';
+				SSIDkeyboard_writtentext[SSID_indexkeyboard] = kbd_char(';', SSID_uppercase);
 				SSID_indexkeyboard+=1;
 				presssound();
 			}else maxsound();
@@ -1565,75 +1618,7 @@ if(chosenmenu==1){
 					   GRRLIB_DrawImg(btz_coordX-10, btz_coordY-10, tex_btz_png, 0, kbd_button_Xsize+0.5, kbd_button_Ysize+0.5, GRRLIB_WHITE);
 				}else GRRLIB_DrawImg(btz_coordX-10, btz_coordY-10, tex_btz_UP_png, 0, kbd_button_Xsize+0.5, kbd_button_Ysize+0.5, GRRLIB_WHITE);
 				}
-				else if (CusorOnKey(zero_coordX,zero_coordY,44,36)==true){
-					   GRRLIB_DrawImg(zero_coordX-10, zero_coordY-10, tex_zero_png, 0, kbd_button_Xsize+0.5, kbd_button_Ysize+0.5, GRRLIB_WHITE);
-				}
-				else if (CusorOnKey(one_coordX,one_coordY,44,36)==true){
-					   GRRLIB_DrawImg(one_coordX-10, one_coordY-10, tex_one_png, 0, kbd_button_Xsize+0.5, kbd_button_Ysize+0.5, GRRLIB_WHITE);
-				}
-				else if (CusorOnKey(two_coordX,two_coordY,44,36)==true){
-					   GRRLIB_DrawImg(two_coordX-10, two_coordY-10, tex_two_png, 0, kbd_button_Xsize+0.5, kbd_button_Ysize+0.5, GRRLIB_WHITE);
-				}
-				else if (CusorOnKey(three_coordX,three_coordY,44,36)==true){
-					   GRRLIB_DrawImg(three_coordX-10, three_coordY-10, tex_three_png, 0, kbd_button_Xsize+0.5, kbd_button_Ysize+0.5, GRRLIB_WHITE);
-				}
-				else if (CusorOnKey(four_coordX,four_coordY,44,36)==true){
-					   GRRLIB_DrawImg(four_coordX-10, four_coordY-10, tex_four_png, 0, kbd_button_Xsize+0.5, kbd_button_Ysize+0.5, GRRLIB_WHITE);
-				}
-				else if (CusorOnKey(five_coordX,five_coordY,44,36)==true){
-					   GRRLIB_DrawImg(five_coordX-10, five_coordY-10, tex_five_png, 0, kbd_button_Xsize+0.5, kbd_button_Ysize+0.5, GRRLIB_WHITE);
-				}
-				else if (CusorOnKey(six_coordX,six_coordY,44,36)==true){
-					   GRRLIB_DrawImg(six_coordX-10, six_coordY-10, tex_six_png, 0, kbd_button_Xsize+0.5, kbd_button_Ysize+0.5, GRRLIB_WHITE);
-				}
-				else if (CusorOnKey(seven_coordX,seven_coordY,44,36)==true){
-					   GRRLIB_DrawImg(seven_coordX-10, seven_coordY-10, tex_seven_png, 0, kbd_button_Xsize+0.5, kbd_button_Ysize+0.5, GRRLIB_WHITE);
-				}
-				else if (CusorOnKey(eight_coordX,eight_coordY,44,36)==true){
-					   GRRLIB_DrawImg(eight_coordX-10, eight_coordY-10, tex_eight_png, 0, kbd_button_Xsize+0.5, kbd_button_Ysize+0.5, GRRLIB_WHITE);
-				}
-				else if (CusorOnKey(nine_coordX,nine_coordY,44,36)==true){
-					   GRRLIB_DrawImg(nine_coordX-10, nine_coordY-10, tex_nine_png, 0, kbd_button_Xsize+0.5, kbd_button_Ysize+0.5, GRRLIB_WHITE);
-				}
-				else if (CusorOnKey(bracket_1_coordX,bracket_1_coordY,44,36)==true){
-					   GRRLIB_DrawImg(bracket_1_coordX-10, bracket_1_coordY-10, tex_bracket_1_png, 0, kbd_button_Xsize+0.5, kbd_button_Ysize+0.5, GRRLIB_WHITE);
-				}
-				else if (CusorOnKey(bracket_2_coordX,bracket_2_coordY,44,36)==true){
-					   GRRLIB_DrawImg(bracket_2_coordX-10, bracket_2_coordY-10, tex_bracket_2_png, 0, kbd_button_Xsize+0.5, kbd_button_Ysize+0.5, GRRLIB_WHITE);
-				}
-				else if (CusorOnKey(backslash_coordX,backslash_coordY,44,36)==true){
-					   GRRLIB_DrawImg(backslash_coordX-10, backslash_coordY-10, tex_backslash_png, 0, kbd_button_Xsize+0.5, kbd_button_Ysize+0.5, GRRLIB_WHITE);
-				}
-				else if (CusorOnKey(slash_coordX,slash_coordY,44,36)==true){
-					   GRRLIB_DrawImg(slash_coordX-10, slash_coordY-10, tex_slash_png, 0, kbd_button_Xsize+0.5, kbd_button_Ysize+0.5, GRRLIB_WHITE);
-				}
-				else if (CusorOnKey(apostrophe_coordX,apostrophe_coordY,44,36)==true){
-					   GRRLIB_DrawImg(apostrophe_coordX-10, apostrophe_coordY-10, tex_apostrophe_png, 0, kbd_button_Xsize+0.5, kbd_button_Ysize+0.5, GRRLIB_WHITE);
-				}
-				else if (CusorOnKey(hash_coordX,hash_coordY,44,36)==true){
-					   GRRLIB_DrawImg(hash_coordX-10, hash_coordY-10, tex_hash_png, 0, kbd_button_Xsize+0.5, kbd_button_Ysize+0.5, GRRLIB_WHITE);
-				}
-				else if (CusorOnKey(comma_coordX,comma_coordY,44,36)==true){
-					   GRRLIB_DrawImg(comma_coordX-10, comma_coordY-10, tex_comma_png, 0, kbd_button_Xsize+0.5, kbd_button_Ysize+0.5, GRRLIB_WHITE);
-				}
-				else if (CusorOnKey(point_coordX,point_coordY,44,36)==true){
-					   GRRLIB_DrawImg(point_coordX-10, point_coordY-10, tex_point_png, 0, kbd_button_Xsize+0.5, kbd_button_Ysize+0.5, GRRLIB_WHITE);
-				}
-				else if (CusorOnKey(equal_coordX,equal_coordY,44,36)==true){
-					   GRRLIB_DrawImg(equal_coordX-10, equal_coordY-10, tex_equal_png, 0, kbd_button_Xsize+0.5, kbd_button_Ysize+0.5, GRRLIB_WHITE);
-				}
-				else if (CusorOnKey(equal_coordX,equal_coordY,44,36)==true){
-					   GRRLIB_DrawImg(equal_coordX-10, equal_coordY-10, tex_equal_png, 0, kbd_button_Xsize+0.5, kbd_button_Ysize+0.5, GRRLIB_WHITE);
-				}
-				else if (CusorOnKey(semicolon_coordX,semicolon_coordY,44,36)==true){
-					   GRRLIB_DrawImg(semicolon_coordX-10, semicolon_coordY-10, tex_semicolon_png, 0, kbd_button_Xsize+0.5, kbd_button_Ysize+0.5, GRRLIB_WHITE);
-				}
-				else if (CusorOnKey(dash_coordX,dash_coordY,44,36)==true){
-					   GRRLIB_DrawImg(dash_coordX-10, dash_coordY-10, tex_dash_png, 0, kbd_button_Xsize+0.5, kbd_button_Ysize+0.5, GRRLIB_WHITE);
-				}
-				else if (CusorOnKey(underscore_coordX,underscore_coordY,44,36)==true){
-					   GRRLIB_DrawImg(underscore_coordX-10, underscore_coordY-10, tex_underscore_png, 0, kbd_button_Xsize+0.5, kbd_button_Ysize+0.5, GRRLIB_WHITE);
-				}
+				else kbd_draw_hovered_symbol_key(symbol_keys, SSID_uppercase, tex_BMfont5);
 	
 					
 
@@ -1760,11 +1745,12 @@ while(chosenmenu==2){//keyboard for password. max 63 characters
 				GRRLIB_DrawImg(point_coordX, point_coordY, tex_point_png, 0, kbd_button_Xsize, kbd_button_Ysize, GRRLIB_WHITE);
 				GRRLIB_DrawImg(equal_coordX, equal_coordY, tex_equal_png, 0, kbd_button_Xsize, kbd_button_Ysize, GRRLIB_WHITE);
 				GRRLIB_DrawImg(semicolon_coordX, semicolon_coordY, tex_semicolon_png, 0, kbd_button_Xsize, kbd_button_Ysize, GRRLIB_WHITE);
+				if (Password_uppercase) kbd_draw_caps_labels(symbol_keys, tex_BMfont5); //after every key is drawn so nothing covers a label
 				
 				
 				//this small part splits passwordkeyboard_wirttentext into two lines when it reached 45 caracters.
-                GRRLIB_Printf(35, 50, tex_BMfont5, GRRLIB_BLACK, passwordkbd_zoom, password_firstline); //write on the screen the text that is being written
-				GRRLIB_Printf(35, 75, tex_BMfont5, GRRLIB_BLACK, passwordkbd_zoom, password_secondline); //write on the screen the text that is being written
+                GRRLIB_Printf(35, 50, tex_BMfont5, GRRLIB_BLACK, passwordkbd_zoom, "%s", password_firstline); //write on the screen the text that is being written
+				GRRLIB_Printf(35, 75, tex_BMfont5, GRRLIB_BLACK, passwordkbd_zoom, "%s", password_secondline); //write on the screen the text that is being written
 				
 				GRRLIB_Printf(35, 100, tex_BMfont5, CurrentColor(Password_indexkeyboard,63), 1, "%d/63", Password_indexkeyboard); //turns red when we are at 63/63
 
@@ -1793,260 +1779,260 @@ while(chosenmenu==2){//keyboard for password. max 63 characters
 
 	if(wpaddown & WPAD_BUTTON_A || paddown & PAD_BUTTON_A) {			
 		if(GRRLIB_RectOnRect(bta_coordX,bta_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
-			if (Password_indexkeyboard<=62) { //if we aren't at the maximum length ---> if Password_uppercase==true we write 'A', else we write 'a'
-			if (Password_uppercase==true){Passwordkeyboard_writtentext[Password_indexkeyboard] = 'A';} else {Passwordkeyboard_writtentext[Password_indexkeyboard] = 'a';}
+			if (Password_indexkeyboard<=62) { //if we aren't at the maximum length ---> kbd_char() picks 'a' or 'A' from Password_uppercase (CAPS)
+			Passwordkeyboard_writtentext[Password_indexkeyboard] = kbd_char('a', Password_uppercase);
 			Password_indexkeyboard+=1;
 			presssound();
 			} else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(btb_coordX,btb_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (Password_indexkeyboard<=62) { 
-			if (Password_uppercase==true){Passwordkeyboard_writtentext[Password_indexkeyboard] = 'B';} else {Passwordkeyboard_writtentext[Password_indexkeyboard] = 'b';}
+			Passwordkeyboard_writtentext[Password_indexkeyboard] = kbd_char('b', Password_uppercase);
 			Password_indexkeyboard+=1;
 			presssound();
 			} else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(btc_coordX,btc_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (Password_indexkeyboard<=62) { 
-			if (Password_uppercase==true){Passwordkeyboard_writtentext[Password_indexkeyboard] = 'C';} else {Passwordkeyboard_writtentext[Password_indexkeyboard] = 'c';}
+			Passwordkeyboard_writtentext[Password_indexkeyboard] = kbd_char('c', Password_uppercase);
 			Password_indexkeyboard+=1;
 			presssound();
 			} else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(btd_coordX,btd_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (Password_indexkeyboard<=62) { 
-			if (Password_uppercase==true){Passwordkeyboard_writtentext[Password_indexkeyboard] = 'D';} else {Passwordkeyboard_writtentext[Password_indexkeyboard] = 'd';}
+			Passwordkeyboard_writtentext[Password_indexkeyboard] = kbd_char('d', Password_uppercase);
 			Password_indexkeyboard+=1;
 			presssound();
 			} else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(bte_coordX,bte_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (Password_indexkeyboard<=62) { 
-			if (Password_uppercase==true){Passwordkeyboard_writtentext[Password_indexkeyboard] = 'E';} else {Passwordkeyboard_writtentext[Password_indexkeyboard] = 'e';}
+			Passwordkeyboard_writtentext[Password_indexkeyboard] = kbd_char('e', Password_uppercase);
 			Password_indexkeyboard+=1;
 			presssound();
 			} else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(btf_coordX,btf_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (Password_indexkeyboard<=62) { 
-			if (Password_uppercase==true){Passwordkeyboard_writtentext[Password_indexkeyboard] = 'F';} else {Passwordkeyboard_writtentext[Password_indexkeyboard] = 'f';}
+			Passwordkeyboard_writtentext[Password_indexkeyboard] = kbd_char('f', Password_uppercase);
 			Password_indexkeyboard+=1;
 			presssound();
 			} else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(btg_coordX,btg_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (Password_indexkeyboard<=62) { 
-			if (Password_uppercase==true){Passwordkeyboard_writtentext[Password_indexkeyboard] = 'G';} else {Passwordkeyboard_writtentext[Password_indexkeyboard] = 'g';}
+			Passwordkeyboard_writtentext[Password_indexkeyboard] = kbd_char('g', Password_uppercase);
 			Password_indexkeyboard+=1;
 			presssound();
 			} else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(bth_coordX,bth_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (Password_indexkeyboard<=62) { 
-			if (Password_uppercase==true){Passwordkeyboard_writtentext[Password_indexkeyboard] = 'H';} else {Passwordkeyboard_writtentext[Password_indexkeyboard] = 'h';}
+			Passwordkeyboard_writtentext[Password_indexkeyboard] = kbd_char('h', Password_uppercase);
 			Password_indexkeyboard+=1;
 			presssound();
 			} else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(bti_coordX,bti_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (Password_indexkeyboard<=62) { 
-			if (Password_uppercase==true){Passwordkeyboard_writtentext[Password_indexkeyboard] = 'I';} else {Passwordkeyboard_writtentext[Password_indexkeyboard] = 'i';}
+			Passwordkeyboard_writtentext[Password_indexkeyboard] = kbd_char('i', Password_uppercase);
 			Password_indexkeyboard+=1;
 			presssound();
 			} else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(btj_coordX,btj_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (Password_indexkeyboard<=62) { 
-			if (Password_uppercase==true){Passwordkeyboard_writtentext[Password_indexkeyboard] = 'J';} else {Passwordkeyboard_writtentext[Password_indexkeyboard] = 'j';}
+			Passwordkeyboard_writtentext[Password_indexkeyboard] = kbd_char('j', Password_uppercase);
 			Password_indexkeyboard+=1;
 			presssound();
 			} else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(btk_coordX,btk_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (Password_indexkeyboard<=62) { 
-			if (Password_uppercase==true){Passwordkeyboard_writtentext[Password_indexkeyboard] = 'K';} else {Passwordkeyboard_writtentext[Password_indexkeyboard] = 'k';}
+			Passwordkeyboard_writtentext[Password_indexkeyboard] = kbd_char('k', Password_uppercase);
 			Password_indexkeyboard+=1;
 			presssound();
 			} else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(btl_coordX,btl_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (Password_indexkeyboard<=62) { 
-			if (Password_uppercase==true){Passwordkeyboard_writtentext[Password_indexkeyboard] = 'L';} else {Passwordkeyboard_writtentext[Password_indexkeyboard] = 'l';}
+			Passwordkeyboard_writtentext[Password_indexkeyboard] = kbd_char('l', Password_uppercase);
 			Password_indexkeyboard+=1;
 			presssound();
 			} else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(btm_coordX,btm_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (Password_indexkeyboard<=62) { 
-			if (Password_uppercase==true){Passwordkeyboard_writtentext[Password_indexkeyboard] = 'M';} else {Passwordkeyboard_writtentext[Password_indexkeyboard] = 'm';}
+			Passwordkeyboard_writtentext[Password_indexkeyboard] = kbd_char('m', Password_uppercase);
 			Password_indexkeyboard+=1;
 			presssound();
 			} else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(btn_coordX,btn_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (Password_indexkeyboard<=62) { 
-			if (Password_uppercase==true){Passwordkeyboard_writtentext[Password_indexkeyboard] = 'N';} else {Passwordkeyboard_writtentext[Password_indexkeyboard] = 'n';}
+			Passwordkeyboard_writtentext[Password_indexkeyboard] = kbd_char('n', Password_uppercase);
 			Password_indexkeyboard+=1;
 			presssound();
 			} else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(bto_coordX,bto_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (Password_indexkeyboard<=62) { 
-			if (Password_uppercase==true){Passwordkeyboard_writtentext[Password_indexkeyboard] = 'O';} else {Passwordkeyboard_writtentext[Password_indexkeyboard] = 'o';}
+			Passwordkeyboard_writtentext[Password_indexkeyboard] = kbd_char('o', Password_uppercase);
 			Password_indexkeyboard+=1;
 			presssound();
 			} else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(btp_coordX,btp_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (Password_indexkeyboard<=62) { 
-			if (Password_uppercase==true){Passwordkeyboard_writtentext[Password_indexkeyboard] = 'P';} else {Passwordkeyboard_writtentext[Password_indexkeyboard] = 'p';}
+			Passwordkeyboard_writtentext[Password_indexkeyboard] = kbd_char('p', Password_uppercase);
 			Password_indexkeyboard+=1;
 			presssound();
 			} else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(btq_coordX,btq_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (Password_indexkeyboard<=62) { 
-			if (Password_uppercase==true){Passwordkeyboard_writtentext[Password_indexkeyboard] = 'Q';} else {Passwordkeyboard_writtentext[Password_indexkeyboard] = 'q';}
+			Passwordkeyboard_writtentext[Password_indexkeyboard] = kbd_char('q', Password_uppercase);
 			Password_indexkeyboard+=1;
 			presssound();
 			} else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(btr_coordX,btr_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (Password_indexkeyboard<=62) { 
-			if (Password_uppercase==true){Passwordkeyboard_writtentext[Password_indexkeyboard] = 'R';} else {Passwordkeyboard_writtentext[Password_indexkeyboard] = 'r';}
+			Passwordkeyboard_writtentext[Password_indexkeyboard] = kbd_char('r', Password_uppercase);
 			Password_indexkeyboard+=1;
 			presssound();
 			} else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(bts_coordX,bts_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (Password_indexkeyboard<=62) { 
-			if (Password_uppercase==true){Passwordkeyboard_writtentext[Password_indexkeyboard] = 'S';} else {Passwordkeyboard_writtentext[Password_indexkeyboard] = 's';}
+			Passwordkeyboard_writtentext[Password_indexkeyboard] = kbd_char('s', Password_uppercase);
 			Password_indexkeyboard+=1;
 			presssound();
 			} else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(btt_coordX,btt_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (Password_indexkeyboard<=62) { 
-			if (Password_uppercase==true){Passwordkeyboard_writtentext[Password_indexkeyboard] = 'T';} else {Passwordkeyboard_writtentext[Password_indexkeyboard] = 't';}
+			Passwordkeyboard_writtentext[Password_indexkeyboard] = kbd_char('t', Password_uppercase);
 			Password_indexkeyboard+=1;
 			presssound();
 			} else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(btu_coordX,btu_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (Password_indexkeyboard<=62) { 
-			if (Password_uppercase==true){Passwordkeyboard_writtentext[Password_indexkeyboard] = 'U';} else {Passwordkeyboard_writtentext[Password_indexkeyboard] = 'u';}
+			Passwordkeyboard_writtentext[Password_indexkeyboard] = kbd_char('u', Password_uppercase);
 			Password_indexkeyboard+=1;
 			presssound();
 			} else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(btv_coordX,btv_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (Password_indexkeyboard<=62) { 
-			if (Password_uppercase==true){Passwordkeyboard_writtentext[Password_indexkeyboard] = 'V';} else {Passwordkeyboard_writtentext[Password_indexkeyboard] = 'v';}
+			Passwordkeyboard_writtentext[Password_indexkeyboard] = kbd_char('v', Password_uppercase);
 			Password_indexkeyboard+=1;
 			presssound();
 			} else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(btw_coordX,btw_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (Password_indexkeyboard<=62) { 
-			if (Password_uppercase==true){Passwordkeyboard_writtentext[Password_indexkeyboard] = 'W';} else {Passwordkeyboard_writtentext[Password_indexkeyboard] = 'w';}
+			Passwordkeyboard_writtentext[Password_indexkeyboard] = kbd_char('w', Password_uppercase);
 			Password_indexkeyboard+=1;
 			presssound();
 			} else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(btx_coordX,btx_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (Password_indexkeyboard<=62) { 
-			if (Password_uppercase==true){Passwordkeyboard_writtentext[Password_indexkeyboard] = 'X';} else {Passwordkeyboard_writtentext[Password_indexkeyboard] = 'x';}
+			Passwordkeyboard_writtentext[Password_indexkeyboard] = kbd_char('x', Password_uppercase);
 			Password_indexkeyboard+=1;
 			presssound();
 			} else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(bty_coordX,bty_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (Password_indexkeyboard<=62) { 
-			if (Password_uppercase==true){Passwordkeyboard_writtentext[Password_indexkeyboard] = 'Y';} else {Passwordkeyboard_writtentext[Password_indexkeyboard] = 'y';}
+			Passwordkeyboard_writtentext[Password_indexkeyboard] = kbd_char('y', Password_uppercase);
 			Password_indexkeyboard+=1;
 			presssound();
 			} else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(btz_coordX,btz_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (Password_indexkeyboard<=62) { 
-			if (Password_uppercase==true){Passwordkeyboard_writtentext[Password_indexkeyboard] = 'Z';} else {Passwordkeyboard_writtentext[Password_indexkeyboard] = 'z';}
+			Passwordkeyboard_writtentext[Password_indexkeyboard] = kbd_char('z', Password_uppercase);
 			Password_indexkeyboard+=1;
 			presssound();
 			} else maxsound();
 			wiirumble_set(0,vib_duration2);
 		} else if(GRRLIB_RectOnRect(zero_coordX,zero_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (Password_indexkeyboard<=62) { 
-			Passwordkeyboard_writtentext[Password_indexkeyboard] = '0';
+			Passwordkeyboard_writtentext[Password_indexkeyboard] = kbd_char('0', Password_uppercase);
 			Password_indexkeyboard+=1;
 			presssound();
 			} else maxsound();
 			wiirumble_set(0,vib_duration2);
 		} else if(GRRLIB_RectOnRect(one_coordX,one_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (Password_indexkeyboard<=62) { 
-			Passwordkeyboard_writtentext[Password_indexkeyboard] = '1';
+			Passwordkeyboard_writtentext[Password_indexkeyboard] = kbd_char('1', Password_uppercase);
 			Password_indexkeyboard+=1;
 			presssound();
 			} else maxsound();
 			wiirumble_set(0,vib_duration2);
 		} else if(GRRLIB_RectOnRect(two_coordX,two_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (Password_indexkeyboard<=62) { 
-			Passwordkeyboard_writtentext[Password_indexkeyboard] = '2';
+			Passwordkeyboard_writtentext[Password_indexkeyboard] = kbd_char('2', Password_uppercase);
 			Password_indexkeyboard+=1;
 			presssound();
 			} else maxsound();
 			wiirumble_set(0,vib_duration2);
 		} else if(GRRLIB_RectOnRect(three_coordX,three_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (Password_indexkeyboard<=62) { 
-			Passwordkeyboard_writtentext[Password_indexkeyboard] = '3';
+			Passwordkeyboard_writtentext[Password_indexkeyboard] = kbd_char('3', Password_uppercase);
 			Password_indexkeyboard+=1;
 			presssound();
 			} else maxsound();
 			wiirumble_set(0,vib_duration2);
 		} else if(GRRLIB_RectOnRect(four_coordX,four_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (Password_indexkeyboard<=62) { 
-			Passwordkeyboard_writtentext[Password_indexkeyboard] = '4';
+			Passwordkeyboard_writtentext[Password_indexkeyboard] = kbd_char('4', Password_uppercase);
 			Password_indexkeyboard+=1;
 			presssound();
 			} else maxsound();
 			wiirumble_set(0,vib_duration2);
 		} else if(GRRLIB_RectOnRect(five_coordX,five_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (Password_indexkeyboard<=62) { 
-			Passwordkeyboard_writtentext[Password_indexkeyboard] = '5';
+			Passwordkeyboard_writtentext[Password_indexkeyboard] = kbd_char('5', Password_uppercase);
 			Password_indexkeyboard+=1;
 			presssound();
 			} else maxsound();
 			wiirumble_set(0,vib_duration2);
 		} else if(GRRLIB_RectOnRect(six_coordX,six_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (Password_indexkeyboard<=62) { 
-			Passwordkeyboard_writtentext[Password_indexkeyboard] = '6';
+			Passwordkeyboard_writtentext[Password_indexkeyboard] = kbd_char('6', Password_uppercase);
 			Password_indexkeyboard+=1;
 			presssound();
 			} else maxsound();
 			wiirumble_set(0,vib_duration2);
 		} else if(GRRLIB_RectOnRect(seven_coordX,seven_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (Password_indexkeyboard<=62) { 
-			Passwordkeyboard_writtentext[Password_indexkeyboard] = '7';
+			Passwordkeyboard_writtentext[Password_indexkeyboard] = kbd_char('7', Password_uppercase);
 			Password_indexkeyboard+=1;
 			presssound();
 			} else maxsound();
 			wiirumble_set(0,vib_duration2);
 		} else if(GRRLIB_RectOnRect(eight_coordX,eight_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (Password_indexkeyboard<=62) { 
-			Passwordkeyboard_writtentext[Password_indexkeyboard] = '8';
+			Passwordkeyboard_writtentext[Password_indexkeyboard] = kbd_char('8', Password_uppercase);
 			Password_indexkeyboard+=1;
 			presssound();
 			} else maxsound();
 			wiirumble_set(0,vib_duration2);
 		} else if(GRRLIB_RectOnRect(nine_coordX,nine_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (Password_indexkeyboard<=62) { 
-			Passwordkeyboard_writtentext[Password_indexkeyboard] = '9';
+			Passwordkeyboard_writtentext[Password_indexkeyboard] = kbd_char('9', Password_uppercase);
 			Password_indexkeyboard+=1;
 			presssound();
 			} else maxsound();
 			wiirumble_set(0,vib_duration2);
 		} else if(GRRLIB_RectOnRect(dash_coordX,dash_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (Password_indexkeyboard<=62) { 
-			Passwordkeyboard_writtentext[Password_indexkeyboard] = '-';
+			Passwordkeyboard_writtentext[Password_indexkeyboard] = kbd_char('-', Password_uppercase);
 			Password_indexkeyboard+=1;
 			presssound();
 			} else maxsound();
@@ -2060,70 +2046,70 @@ while(chosenmenu==2){//keyboard for password. max 63 characters
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(bracket_1_coordX,bracket_1_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (Password_indexkeyboard<=62) { 
-				Passwordkeyboard_writtentext[Password_indexkeyboard] = '[';
+				Passwordkeyboard_writtentext[Password_indexkeyboard] = kbd_char('[', Password_uppercase);
 				Password_indexkeyboard+=1;
 				presssound();
 			}else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(bracket_2_coordX,bracket_2_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (Password_indexkeyboard<=62) { 
-				Passwordkeyboard_writtentext[Password_indexkeyboard] = ']';
+				Passwordkeyboard_writtentext[Password_indexkeyboard] = kbd_char(']', Password_uppercase);
 				Password_indexkeyboard+=1;
 				presssound();
 			}else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(backslash_coordX,backslash_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (Password_indexkeyboard<=62) { 
-				Passwordkeyboard_writtentext[Password_indexkeyboard] = '\\';
+				Passwordkeyboard_writtentext[Password_indexkeyboard] = kbd_char('\\', Password_uppercase);
 				Password_indexkeyboard+=1;
 				presssound();
 			}else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(slash_coordX,slash_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (Password_indexkeyboard<=62) { 
-				Passwordkeyboard_writtentext[Password_indexkeyboard] = '/';
+				Passwordkeyboard_writtentext[Password_indexkeyboard] = kbd_char('/', Password_uppercase);
 				Password_indexkeyboard+=1;
 				presssound();
 			}else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(apostrophe_coordX,apostrophe_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (Password_indexkeyboard<=62) { 
-				Passwordkeyboard_writtentext[Password_indexkeyboard] = '\'';
+				Passwordkeyboard_writtentext[Password_indexkeyboard] = kbd_char('\'', Password_uppercase);
 				Password_indexkeyboard+=1;
 				presssound();
 			}else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(hash_coordX,hash_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (Password_indexkeyboard<=62) { 
-				Passwordkeyboard_writtentext[Password_indexkeyboard] = '#';
+				Passwordkeyboard_writtentext[Password_indexkeyboard] = kbd_char('#', Password_uppercase);
 				Password_indexkeyboard+=1;
 				presssound();
 			}else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(comma_coordX,comma_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (Password_indexkeyboard<=62) { 
-				Passwordkeyboard_writtentext[Password_indexkeyboard] = ',';
+				Passwordkeyboard_writtentext[Password_indexkeyboard] = kbd_char(',', Password_uppercase);
 				Password_indexkeyboard+=1;
 				presssound();
 			}else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(point_coordX,point_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (Password_indexkeyboard<=62) { 
-				Passwordkeyboard_writtentext[Password_indexkeyboard] = '.';
+				Passwordkeyboard_writtentext[Password_indexkeyboard] = kbd_char('.', Password_uppercase);
 				Password_indexkeyboard+=1;
 				presssound();
 			}else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(equal_coordX,equal_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (Password_indexkeyboard<=62) { 
-				Passwordkeyboard_writtentext[Password_indexkeyboard] = '=';
+				Passwordkeyboard_writtentext[Password_indexkeyboard] = kbd_char('=', Password_uppercase);
 				Password_indexkeyboard+=1;
 				presssound();
 			}else maxsound();
 			wiirumble_set(0,vib_duration2);
 		}else if(GRRLIB_RectOnRect(semicolon_coordX,semicolon_coordY,44,36,cursor_positionX, cursor_positionY,collision_sizex,collision_sizey)){
 			if (Password_indexkeyboard<=62) { 
-				Passwordkeyboard_writtentext[Password_indexkeyboard] = ';';
+				Passwordkeyboard_writtentext[Password_indexkeyboard] = kbd_char(';', Password_uppercase);
 				Password_indexkeyboard+=1;
 				presssound();
 			}else maxsound();
@@ -2339,96 +2325,7 @@ while(chosenmenu==2){//keyboard for password. max 63 characters
 					   GRRLIB_DrawImg(btz_coordX-10, btz_coordY-10, tex_btz_png, 0, kbd_button_Xsize+0.5, kbd_button_Ysize+0.5, GRRLIB_WHITE);
 					}else GRRLIB_DrawImg(btz_coordX-10, btz_coordY-10, tex_btz_UP_png, 0, kbd_button_Xsize+0.5, kbd_button_Ysize+0.5, GRRLIB_WHITE);
 				}
-				else if (CusorOnKey(zero_coordX,zero_coordY,44,36)==true){
-					
-					   GRRLIB_DrawImg(zero_coordX-10, zero_coordY-10, tex_zero_png, 0, kbd_button_Xsize+0.5, kbd_button_Ysize+0.5, GRRLIB_WHITE);
-				}
-				else if (CusorOnKey(one_coordX,one_coordY,44,36)==true){
-					
-					   GRRLIB_DrawImg(one_coordX-10, one_coordY-10, tex_one_png, 0, kbd_button_Xsize+0.5, kbd_button_Ysize+0.5, GRRLIB_WHITE);
-				}
-				else if (CusorOnKey(two_coordX,two_coordY,44,36)==true){
-					   
-					   GRRLIB_DrawImg(two_coordX-10, two_coordY-10, tex_two_png, 0, kbd_button_Xsize+0.5, kbd_button_Ysize+0.5, GRRLIB_WHITE);
-				}
-				else if (CusorOnKey(three_coordX,three_coordY,44,36)==true){
-					   
-					   GRRLIB_DrawImg(three_coordX-10, three_coordY-10, tex_three_png, 0, kbd_button_Xsize+0.5, kbd_button_Ysize+0.5, GRRLIB_WHITE);
-				}
-				else if (CusorOnKey(four_coordX,four_coordY,44,36)==true){
-					   
-					   GRRLIB_DrawImg(four_coordX-10, four_coordY-10, tex_four_png, 0, kbd_button_Xsize+0.5, kbd_button_Ysize+0.5, GRRLIB_WHITE);
-				}
-				else if (CusorOnKey(five_coordX,five_coordY,44,36)==true){
-					   
-					   GRRLIB_DrawImg(five_coordX-10, five_coordY-10, tex_five_png, 0, kbd_button_Xsize+0.5, kbd_button_Ysize+0.5, GRRLIB_WHITE);
-				}
-				else if (CusorOnKey(six_coordX,six_coordY,44,36)==true){
-					   
-					   GRRLIB_DrawImg(six_coordX-10, six_coordY-10, tex_six_png, 0, kbd_button_Xsize+0.5, kbd_button_Ysize+0.5, GRRLIB_WHITE);
-				}
-				else if (CusorOnKey(seven_coordX,seven_coordY,44,36)==true){
-					   
-					   GRRLIB_DrawImg(seven_coordX-10, seven_coordY-10, tex_seven_png, 0, kbd_button_Xsize+0.5, kbd_button_Ysize+0.5, GRRLIB_WHITE);
-				}
-				else if (CusorOnKey(eight_coordX,eight_coordY,44,36)==true){
-					   
-					   GRRLIB_DrawImg(eight_coordX-10, eight_coordY-10, tex_eight_png, 0, kbd_button_Xsize+0.5, kbd_button_Ysize+0.5, GRRLIB_WHITE);
-				}
-				else if (CusorOnKey(nine_coordX,nine_coordY,44,36)==true){
-					   
-					   GRRLIB_DrawImg(nine_coordX-10, nine_coordY-10, tex_nine_png, 0, kbd_button_Xsize+0.5, kbd_button_Ysize+0.5, GRRLIB_WHITE);
-				}
-				else if (CusorOnKey(bracket_1_coordX,bracket_1_coordY,44,36)==true){
-					   
-					   GRRLIB_DrawImg(bracket_1_coordX-10, bracket_1_coordY-10, tex_bracket_1_png, 0, kbd_button_Xsize+0.5, kbd_button_Ysize+0.5, GRRLIB_WHITE);
-				}
-				else if (CusorOnKey(bracket_2_coordX,bracket_2_coordY,44,36)==true){
-					   
-					   GRRLIB_DrawImg(bracket_2_coordX-10, bracket_2_coordY-10, tex_bracket_2_png, 0, kbd_button_Xsize+0.5, kbd_button_Ysize+0.5, GRRLIB_WHITE);
-				}
-				else if (CusorOnKey(backslash_coordX,backslash_coordY,44,36)==true){
-					   
-					   GRRLIB_DrawImg(backslash_coordX-10, backslash_coordY-10, tex_backslash_png, 0, kbd_button_Xsize+0.5, kbd_button_Ysize+0.5, GRRLIB_WHITE);
-				}
-				else if (CusorOnKey(slash_coordX,slash_coordY,44,36)==true){
-					   
-					   GRRLIB_DrawImg(slash_coordX-10, slash_coordY-10, tex_slash_png, 0, kbd_button_Xsize+0.5, kbd_button_Ysize+0.5, GRRLIB_WHITE);
-				}
-				else if (CusorOnKey(apostrophe_coordX,apostrophe_coordY,44,36)==true){
-					   
-					   GRRLIB_DrawImg(apostrophe_coordX-10, apostrophe_coordY-10, tex_apostrophe_png, 0, kbd_button_Xsize+0.5, kbd_button_Ysize+0.5, GRRLIB_WHITE);
-				}
-				else if (CusorOnKey(hash_coordX,hash_coordY,44,36)==true){
-					   
-					   GRRLIB_DrawImg(hash_coordX-10, hash_coordY-10, tex_hash_png, 0, kbd_button_Xsize+0.5, kbd_button_Ysize+0.5, GRRLIB_WHITE);
-				}
-				else if (CusorOnKey(comma_coordX,comma_coordY,44,36)==true){
-					   
-					   GRRLIB_DrawImg(comma_coordX-10, comma_coordY-10, tex_comma_png, 0, kbd_button_Xsize+0.5, kbd_button_Ysize+0.5, GRRLIB_WHITE);
-				}
-				else if (CusorOnKey(point_coordX,point_coordY,44,36)==true){
-					   
-					   GRRLIB_DrawImg(point_coordX-10, point_coordY-10, tex_point_png, 0, kbd_button_Xsize+0.5, kbd_button_Ysize+0.5, GRRLIB_WHITE);
-				}
-				else if (CusorOnKey(equal_coordX,equal_coordY,44,36)==true){
-					   
-					   GRRLIB_DrawImg(equal_coordX-10, equal_coordY-10, tex_equal_png, 0, kbd_button_Xsize+0.5, kbd_button_Ysize+0.5, GRRLIB_WHITE);
-				}
-				else if (CusorOnKey(equal_coordX,equal_coordY,44,36)==true){
-					   
-					   GRRLIB_DrawImg(equal_coordX-10, equal_coordY-10, tex_equal_png, 0, kbd_button_Xsize+0.5, kbd_button_Ysize+0.5, GRRLIB_WHITE);
-				}
-				else if (CusorOnKey(semicolon_coordX,semicolon_coordY,44,36)==true){
-					   
-					   GRRLIB_DrawImg(semicolon_coordX-10, semicolon_coordY-10, tex_semicolon_png, 0, kbd_button_Xsize+0.5, kbd_button_Ysize+0.5, GRRLIB_WHITE);
-				}
-				else if (CusorOnKey(dash_coordX,dash_coordY,44,36)==true){
-					   GRRLIB_DrawImg(dash_coordX-10, dash_coordY-10, tex_dash_png, 0, kbd_button_Xsize+0.5, kbd_button_Ysize+0.5, GRRLIB_WHITE);
-				}
-				else if (CusorOnKey(underscore_coordX,underscore_coordY,44,36)==true){
-					   GRRLIB_DrawImg(underscore_coordX-10, underscore_coordY-10, tex_underscore_png, 0, kbd_button_Xsize+0.5, kbd_button_Ysize+0.5, GRRLIB_WHITE);
-				}
+				else kbd_draw_hovered_symbol_key(symbol_keys, Password_uppercase, tex_BMfont5);
 
 
 				
