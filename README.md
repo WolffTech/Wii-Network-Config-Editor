@@ -27,6 +27,7 @@ You can also send it over the network without copying anything: open the Homebre
 ## Controls
 
 - Point at a button and press A to select it. Without a sensor bar, use the D-pad to move between buttons and keys, then press A.
+- CAPS on the keyboards works like Shift on a US keyboard: it switches letters to upper case and symbols to their shifted versions (`1` → `!`, `[` → `{`, `/` → `?` and so on, plus `#` → `~` and `-` → `` ` ``). The keys show what they'll type, so every printable character can be entered.
 - B erases the last character on the keyboards and goes back from the Credits and Connection Test screens.
 - HOME saves your changes (from the main menu and the keyboards).
 - A GameCube controller works too: the D-pad and A/B work the same, and START replaces HOME.
